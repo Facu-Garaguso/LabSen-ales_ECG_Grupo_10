@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.9.8)  30 SEP 2026 14:59
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.9.8)  9 OCT 2026 10:31
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -296,78 +296,140 @@ Package pdftex.def Info: Imagenes/ECG_Post_Zoom.png  used on input line 458.
 <Imagenes/ECG_Pre_Offset.png, id=66, 1004.553pt x 353.1594pt>
 File: Imagenes/ECG_Pre_Offset.png Graphic file (type png)
 <use Imagenes/ECG_Pre_Offset.png>
-Package pdftex.def Info: Imagenes/ECG_Pre_Offset.png  used on input line 633.
+Package pdftex.def Info: Imagenes/ECG_Pre_Offset.png  used on input line 637.
 (pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
 <Imagenes/ECG_Post_Offset.png, id=67, 1004.553pt x 353.1594pt>
 File: Imagenes/ECG_Post_Offset.png Graphic file (type png)
 <use Imagenes/ECG_Post_Offset.png>
-Package pdftex.def Info: Imagenes/ECG_Post_Offset.png  used on input line 640.
+Package pdftex.def Info: Imagenes/ECG_Post_Offset.png  used on input line 644.
 (pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
  [11] [12 <./Imagenes/ECG_Pre_Offset.png> <./Imagenes/ECG_Post_Offset.png>]
 <Imagenes/ECG_Pre_PasaAltos.png, id=77, 1004.553pt x 425.4294pt>
 File: Imagenes/ECG_Pre_PasaAltos.png Graphic file (type png)
 <use Imagenes/ECG_Pre_PasaAltos.png>
-Package pdftex.def Info: Imagenes/ECG_Pre_PasaAltos.png  used on input line 682.
+Package pdftex.def Info: Imagenes/ECG_Pre_PasaAltos.png  used on input line 703.
 (pdftex.def)             Requested size: 405.45047pt x 171.70723pt.
 <Imagenes/ECG_Post_PasaAltos.png, id=78, 1004.553pt x 425.4294pt>
 File: Imagenes/ECG_Post_PasaAltos.png Graphic file (type png)
 <use Imagenes/ECG_Post_PasaAltos.png>
-Package pdftex.def Info: Imagenes/ECG_Post_PasaAltos.png  used on input line 689.
+Package pdftex.def Info: Imagenes/ECG_Post_PasaAltos.png  used on input line 710.
 (pdftex.def)             Requested size: 405.45047pt x 171.70723pt.
-<Imagenes/ECG_Pre_PasaAltos_Zoom.png, id=79, 1004.553pt x 425.1885pt>
+ [13 <./Imagenes/ECG_Pre_PasaAltos.png> <./Imagenes/ECG_Post_PasaAltos.png>]
+<Imagenes/ECG_Pre_PasaAltos_Zoom.png, id=84, 1004.553pt x 425.1885pt>
 File: Imagenes/ECG_Pre_PasaAltos_Zoom.png Graphic file (type png)
 <use Imagenes/ECG_Pre_PasaAltos_Zoom.png>
-Package pdftex.def Info: Imagenes/ECG_Pre_PasaAltos_Zoom.png  used on input line 699.
+Package pdftex.def Info: Imagenes/ECG_Pre_PasaAltos_Zoom.png  used on input line 720.
 (pdftex.def)             Requested size: 405.45047pt x 171.61pt.
-<Imagenes/ECG_Post_PasaAltos_Zoom.png, id=80, 1004.553pt x 425.4294pt>
+<Imagenes/ECG_Post_PasaAltos_Zoom.png, id=85, 1004.553pt x 425.4294pt>
 File: Imagenes/ECG_Post_PasaAltos_Zoom.png Graphic file (type png)
 <use Imagenes/ECG_Post_PasaAltos_Zoom.png>
-Package pdftex.def Info: Imagenes/ECG_Post_PasaAltos_Zoom.png  used on input line 706.
+Package pdftex.def Info: Imagenes/ECG_Post_PasaAltos_Zoom.png  used on input line 727.
 (pdftex.def)             Requested size: 405.45047pt x 171.70723pt.
- [13 <./Imagenes/ECG_Pre_PasaAltos.png> <./Imagenes/ECG_Post_PasaAltos.png>] [14 <./Imagenes/ECG_Pre_PasaAltos_Zoom.png> <./Imagenes/ECG_Post_PasaAltos_Zoom.png>]
-<Imagenes/ECG_Pre_PSD.png, id=91, 859.0494pt x 353.1594pt>
+<Imagenes/ECG_Pre_PSD.png, id=86, 859.0494pt x 353.1594pt>
 File: Imagenes/ECG_Pre_PSD.png Graphic file (type png)
 <use Imagenes/ECG_Pre_PSD.png>
-Package pdftex.def Info: Imagenes/ECG_Pre_PSD.png  used on input line 734.
+Package pdftex.def Info: Imagenes/ECG_Pre_PSD.png  used on input line 754.
 (pdftex.def)             Requested size: 384.1096pt x 157.90715pt.
-<Imagenes/ECG_Post_PSD.png, id=92, 859.0494pt x 353.1594pt>
+<Imagenes/ECG_Post_PSD.png, id=87, 859.0494pt x 353.1594pt>
 File: Imagenes/ECG_Post_PSD.png Graphic file (type png)
 <use Imagenes/ECG_Post_PSD.png>
-Package pdftex.def Info: Imagenes/ECG_Post_PSD.png  used on input line 741.
+Package pdftex.def Info: Imagenes/ECG_Post_PSD.png  used on input line 761.
 (pdftex.def)             Requested size: 384.1096pt x 157.90715pt.
- [15 <./Imagenes/ECG_Pre_PSD.png> <./Imagenes/ECG_Post_PSD.png>]
+ [14 <./Imagenes/ECG_Pre_PasaAltos_Zoom.png> <./Imagenes/ECG_Post_PasaAltos_Zoom.png>] [15 <./Imagenes/ECG_Pre_PSD.png> <./Imagenes/ECG_Post_PSD.png>]
 <Imagenes/ECG_Pre_Saturacion.png, id=98, 1004.553pt x 353.1594pt>
 File: Imagenes/ECG_Pre_Saturacion.png Graphic file (type png)
 <use Imagenes/ECG_Pre_Saturacion.png>
-Package pdftex.def Info: Imagenes/ECG_Pre_Saturacion.png  used on input line 797.
+Package pdftex.def Info: Imagenes/ECG_Pre_Saturacion.png  used on input line 817.
 (pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
 <Imagenes/ECG_Post_Saturacion.png, id=99, 1004.553pt x 353.1594pt>
 File: Imagenes/ECG_Post_Saturacion.png Graphic file (type png)
 <use Imagenes/ECG_Post_Saturacion.png>
-Package pdftex.def Info: Imagenes/ECG_Post_Saturacion.png  used on input line 804.
+Package pdftex.def Info: Imagenes/ECG_Post_Saturacion.png  used on input line 824.
 (pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
  [16 <./Imagenes/ECG_Pre_Saturacion.png>]
 <Imagenes/ECG_Pre_Procesado.png, id=104, 1004.553pt x 353.4003pt>
 File: Imagenes/ECG_Pre_Procesado.png Graphic file (type png)
 <use Imagenes/ECG_Pre_Procesado.png>
-Package pdftex.def Info: Imagenes/ECG_Pre_Procesado.png  used on input line 833.
+Package pdftex.def Info: Imagenes/ECG_Pre_Procesado.png  used on input line 852.
 (pdftex.def)             Requested size: 405.45047pt x 142.6356pt.
 <Imagenes/ECG_Post_Procesado.png, id=105, 1004.553pt x 353.1594pt>
 File: Imagenes/ECG_Post_Procesado.png Graphic file (type png)
 <use Imagenes/ECG_Post_Procesado.png>
-Package pdftex.def Info: Imagenes/ECG_Post_Procesado.png  used on input line 840.
+Package pdftex.def Info: Imagenes/ECG_Post_Procesado.png  used on input line 859.
 (pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
 <Imagenes/ECG_Pre_Procesado_Zoom.png, id=106, 1004.553pt x 353.4003pt>
 File: Imagenes/ECG_Pre_Procesado_Zoom.png Graphic file (type png)
 <use Imagenes/ECG_Pre_Procesado_Zoom.png>
-Package pdftex.def Info: Imagenes/ECG_Pre_Procesado_Zoom.png  used on input line 850.
+Package pdftex.def Info: Imagenes/ECG_Pre_Procesado_Zoom.png  used on input line 869.
 (pdftex.def)             Requested size: 405.45047pt x 142.6356pt.
 <Imagenes/ECG_Post_Procesado_Zoom.png, id=107, 1004.553pt x 353.1594pt>
 File: Imagenes/ECG_Post_Procesado_Zoom.png Graphic file (type png)
 <use Imagenes/ECG_Post_Procesado_Zoom.png>
-Package pdftex.def Info: Imagenes/ECG_Post_Procesado_Zoom.png  used on input line 857.
+Package pdftex.def Info: Imagenes/ECG_Post_Procesado_Zoom.png  used on input line 876.
 (pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
- [17 <./Imagenes/ECG_Post_Saturacion.png> <./Imagenes/ECG_Pre_Procesado.png>] [18 <./Imagenes/ECG_Post_Procesado.png> <./Imagenes/ECG_Pre_Procesado_Zoom.png> <./Imagenes/ECG_Post_Procesado_Zoom.png>] [19] [20
+ [17 <./Imagenes/ECG_Post_Saturacion.png> <./Imagenes/ECG_Pre_Procesado.png>] [18 <./Imagenes/ECG_Post_Procesado.png> <./Imagenes/ECG_Pre_Procesado_Zoom.png> <./Imagenes/ECG_Post_Procesado_Zoom.png>]
+<Imagenes/PanTompkins_Etapas_Pre.png, id=120, 1004.553pt x 786.7794pt>
+File: Imagenes/PanTompkins_Etapas_Pre.png Graphic file (type png)
+<use Imagenes/PanTompkins_Etapas_Pre.png>
+Package pdftex.def Info: Imagenes/PanTompkins_Etapas_Pre.png  used on input line 949.
+(pdftex.def)             Requested size: 405.45047pt x 317.55144pt.
+<Imagenes/PanTompkins_Etapas_Post.png, id=121, 1004.553pt x 786.7794pt>
+File: Imagenes/PanTompkins_Etapas_Post.png Graphic file (type png)
+<use Imagenes/PanTompkins_Etapas_Post.png>
+Package pdftex.def Info: Imagenes/PanTompkins_Etapas_Post.png  used on input line 956.
+(pdftex.def)             Requested size: 405.45047pt x 317.55144pt.
+ [19] [20 <./Imagenes/PanTompkins_Etapas_Pre.png>] [21 <./Imagenes/PanTompkins_Etapas_Post.png>]
+<Imagenes/PanTompkins_Pre.png, id=133, 1004.553pt x 353.1594pt>
+File: Imagenes/PanTompkins_Pre.png Graphic file (type png)
+<use Imagenes/PanTompkins_Pre.png>
+Package pdftex.def Info: Imagenes/PanTompkins_Pre.png  used on input line 1021.
+(pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
+<Imagenes/PanTompkins_Post.png, id=134, 1004.553pt x 353.1594pt>
+File: Imagenes/PanTompkins_Post.png Graphic file (type png)
+<use Imagenes/PanTompkins_Post.png>
+Package pdftex.def Info: Imagenes/PanTompkins_Post.png  used on input line 1028.
+(pdftex.def)             Requested size: 405.45047pt x 142.53838pt.
+ [22] [23 <./Imagenes/PanTompkins_Pre.png> <./Imagenes/PanTompkins_Post.png>]
+<Imagenes/FC_Pre.png, id=143, 860.013pt x 280.8894pt>
+File: Imagenes/FC_Pre.png Graphic file (type png)
+<use Imagenes/FC_Pre.png>
+Package pdftex.def Info: Imagenes/FC_Pre.png  used on input line 1075.
+(pdftex.def)             Requested size: 405.45047pt x 132.4252pt.
+<Imagenes/FC_Post.png, id=144, 860.013pt x 280.8894pt>
+File: Imagenes/FC_Post.png Graphic file (type png)
+<use Imagenes/FC_Post.png>
+Package pdftex.def Info: Imagenes/FC_Post.png  used on input line 1082.
+(pdftex.def)             Requested size: 405.45047pt x 132.4252pt.
+ [24 <./Imagenes/FC_Pre.png>]
+<Imagenes/Tacograma_Pre.png, id=151, 860.013pt x 317.0244pt>
+File: Imagenes/Tacograma_Pre.png Graphic file (type png)
+<use Imagenes/Tacograma_Pre.png>
+Package pdftex.def Info: Imagenes/Tacograma_Pre.png  used on input line 1110.
+(pdftex.def)             Requested size: 405.45047pt x 149.46103pt.
+<Imagenes/Tacograma_Post.png, id=152, 860.013pt x 317.0244pt>
+File: Imagenes/Tacograma_Post.png Graphic file (type png)
+<use Imagenes/Tacograma_Post.png>
+Package pdftex.def Info: Imagenes/Tacograma_Post.png  used on input line 1117.
+(pdftex.def)             Requested size: 405.45047pt x 149.46103pt.
+ [25 <./Imagenes/FC_Post.png> <./Imagenes/Tacograma_Pre.png>] [26 <./Imagenes/Tacograma_Post.png>] [27]
+<Imagenes/Lomb_Pre.png, id=165, 860.013pt x 353.1594pt>
+File: Imagenes/Lomb_Pre.png Graphic file (type png)
+<use Imagenes/Lomb_Pre.png>
+Package pdftex.def Info: Imagenes/Lomb_Pre.png  used on input line 1296.
+(pdftex.def)             Requested size: 405.45047pt x 166.49686pt.
+ [28]
+<Imagenes/Lomb_Post.png, id=169, 860.013pt x 353.1594pt>
+File: Imagenes/Lomb_Post.png Graphic file (type png)
+<use Imagenes/Lomb_Post.png>
+Package pdftex.def Info: Imagenes/Lomb_Post.png  used on input line 1342.
+(pdftex.def)             Requested size: 405.45047pt x 166.49686pt.
+ [29 <./Imagenes/Lomb_Pre.png>]
+<Imagenes/Lomb_Comparacion.png, id=174, 860.013pt x 353.1594pt>
+File: Imagenes/Lomb_Comparacion.png Graphic file (type png)
+<use Imagenes/Lomb_Comparacion.png>
+Package pdftex.def Info: Imagenes/Lomb_Comparacion.png  used on input line 1393.
+(pdftex.def)             Requested size: 405.45047pt x 166.49686pt.
+ [30 <./Imagenes/Lomb_Post.png>] [31 <./Imagenes/Lomb_Comparacion.png>] [32] [33
 
 ] (./main.aux
 LaTeX Info: Redefining \. on input line 8.
@@ -379,18 +441,18 @@ L3 programming layer <2026-08-10>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 4699 strings out of 467099
- 79142 string characters out of 5412503
- 505088 words of memory out of 5000000
- 34005 multiletter control sequences out of 15000+600000
+ 4791 strings out of 467099
+ 81956 string characters out of 5412503
+ 505363 words of memory out of 5000000
+ 34097 multiletter control sequences out of 15000+600000
  639001 words of font info for 63 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 57i,7n,65p,314b,365s stack positions out of 10000i,1000n,20000p,200000b,200000s
-<c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbi1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1440.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1728.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx2488.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfrm1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfrm1440.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfti1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sftt1200.pfb>
-Output written on main.pdf (21 pages, 12012245 bytes).
+ 57i,7n,65p,332b,365s stack positions out of 10000i,1000n,20000p,200000b,200000s
+<c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbi1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1440.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1728.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx2488.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfrm1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfrm1440.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfti1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sftt1200.pfb>
+Output written on main.pdf (34 pages, 18223743 bytes).
 PDF statistics:
- 186 PDF objects out of 1000 (max. 8388607)
- 92 compressed objects within 1 object stream
+ 255 PDF objects out of 1000 (max. 8388607)
+ 123 compressed objects within 2 object streams
  0 named destinations out of 1000 (max. 500000)
- 106 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 161 words of extra memory for PDF output out of 10000 (max. 10000000)
 

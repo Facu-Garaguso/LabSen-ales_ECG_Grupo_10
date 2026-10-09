@@ -490,9 +490,12 @@ alrededor del cual se desarrolla la señal varía considerablemente dentro de un
 misma ventana de diez segundos.
 
 Estas variaciones de baja frecuencia son compatibles con una deriva de la línea
-de base. Dentro del sistema de adquisición pueden estar relacionadas con
-variaciones lentas en la interfaz electrodo-piel y con cambios en las condiciones
-de contacto de los electrodos.
+de base. Este fenómeno puede producirse por distintas causas asociadas al
+proceso de adquisición, entre ellas variaciones lentas en la interfaz
+electrodo--piel, cambios en las condiciones de contacto de los electrodos,
+movimientos del paciente y desplazamientos asociados a la respiración. Estos
+efectos pueden modificar lentamente el potencial registrado y producir cambios
+en el nivel de referencia de la señal.
 
 La presencia de esta componente puede dificultar la posterior detección
 automática de los complejos QRS, ya que modifica continuamente el nivel de
@@ -574,14 +577,14 @@ latidos.
 Las principales características encontradas son:
 
 \begin{itemize}
-    \item presencia de una componente de continua cercana a 1.67 V
+    \item presencia de una componente de continua cercana a 1.67 V;
     \item deriva de la línea de base, particularmente importante en el registro
-    posterior a la actividad física
+    posterior a la actividad física;
     \item presencia de segmentos que alcanzan los límites del rango de
-    adquisición en el registro posterior al ejercicio
-    \item pequeñas componentes de ruido superpuestas a la señal
+    adquisición en el registro posterior al ejercicio;
+    \item pequeñas componentes de ruido superpuestas a la señal;
     \item ausencia de evidencia visual suficiente para afirmar la presencia de
-    una interferencia de línea dominante
+    una interferencia de línea dominante.
 \end{itemize}
 
 En consecuencia, el preprocesamiento deberá comenzar por la eliminación de la
@@ -594,6 +597,7 @@ El objetivo de estas operaciones será mejorar la relación señal-ruido sin
 alterar significativamente la localización temporal de los complejos QRS, ya
 que esta información será utilizada posteriormente para construir el tacograma
 y estudiar la variación de la frecuencia cardíaca.
+
 
 % =========================
 % INCISO 5
@@ -653,7 +657,6 @@ mediante una única etapa de filtrado pasa-altos.
 La resta del valor medio se utiliza únicamente como referencia para visualizar
 la señal centrada y facilitar la comparación con el resultado del filtrado.
 
-
 \subsection{Corrección de la deriva mediante filtrado pasa-altos}
 
 Para eliminar la componente continua y reducir las variaciones lentas de la
@@ -672,6 +675,24 @@ complejos QRS.
 Este aspecto es particularmente importante debido a que en los incisos
 posteriores se utilizará la posición temporal de los picos R para calcular los
 intervalos entre latidos.
+
+En particular, en el registro obtenido en reposo pueden identificarse dos
+perturbaciones transitorias de la línea de base, aproximadamente en los
+intervalos comprendidos entre 16--17 s y 51--53 s. Por su carácter localizado
+y por la forma del desplazamiento observado, estas variaciones resultan
+compatibles con una modificación momentánea de las condiciones de contacto
+electrodo--piel, posiblemente asociada a un desplazamiento o desprendimiento
+parcial del electrodo durante la adquisición.
+
+Sin embargo, estas perturbaciones se manifiestan principalmente como
+variaciones de baja frecuencia de la línea de base. Luego de aplicar el filtro
+pasa-altos de 0.5 Hz, su amplitud se reduce considerablemente y la señal
+recupera un nivel de referencia más estable, conservándose las variaciones
+rápidas correspondientes a los complejos QRS. En consecuencia, no se consideró
+necesario incorporar una etapa adicional de corrección específica para estos
+eventos, ya que el acondicionamiento aplicado permite atenuarlos suficientemente
+para que no comprometan de manera significativa la posterior detección de los
+complejos QRS y el cálculo de los intervalos RR.
 
 Las Figuras~\ref{fig:hp-pre} y~\ref{fig:hp-post} muestran la comparación entre
 las señales originales centradas únicamente para su visualización y las señales
@@ -713,7 +734,6 @@ los latidos se analizaron también ventanas temporales de diez segundos.
 Estas representaciones permiten evaluar simultáneamente la reducción de las
 variaciones lentas de la línea de base y la conservación de las variaciones
 rápidas asociadas a los complejos QRS.
-
 
 \subsection{Análisis del contenido frecuencial}
 
@@ -816,7 +836,6 @@ procesamiento digital.
 Por este motivo, estas muestras se conservaron identificadas para poder
 considerarlas posteriormente durante la detección de los complejos QRS.
 
-
 \subsection{Resultado del preprocesamiento}
 
 Luego de aplicar el filtro pasa-altos para corregir la componente continua y
@@ -865,6 +884,578 @@ Estas señales constituyen la entrada para la siguiente etapa del trabajo, en la
 cual se realizará la detección automática de los complejos QRS mediante el
 algoritmo de Pan--Tompkins.
 
+% =========================
+% INCISO 6
+% =========================
+
+\section{Detección de latidos y análisis del tacograma}
+
+A partir de las señales acondicionadas en el inciso anterior se procedió a la
+detección automática de los complejos QRS mediante el algoritmo de
+Pan--Tompkins. La identificación de los complejos QRS permite determinar la
+posición temporal de los picos R y, a partir de ellos, calcular los intervalos
+entre latidos consecutivos y analizar la evolución de la frecuencia cardíaca.
+
+El procedimiento se aplicó de manera independiente sobre el registro obtenido
+en reposo y sobre el registro posterior a la actividad física.
+
+\subsection{Detección de complejos QRS mediante Pan--Tompkins}
+
+El método de Pan--Tompkins se basa en una serie de operaciones destinadas a
+resaltar las características temporales y frecuenciales propias de los
+complejos QRS. En este trabajo se implementó una secuencia compuesta por un
+filtrado pasa-banda, una etapa derivativa, una elevación al cuadrado y una
+integración mediante ventana móvil.
+
+En primer lugar, las señales previamente acondicionadas fueron filtradas
+mediante un pasa-banda comprendido entre
+
+\[
+5~\mathrm{Hz} \leq f \leq 15~\mathrm{Hz}
+\]
+
+con el objetivo de realzar el contenido frecuencial asociado principalmente a
+los complejos QRS y atenuar componentes de frecuencia considerablemente menor
+o mayor.
+
+Posteriormente se aplicó un filtro derivativo. Esta operación permite resaltar
+las variaciones rápidas de la señal, de manera que las pendientes elevadas
+características de los complejos QRS adquieren una mayor importancia relativa.
+
+La salida de la derivada fue elevada al cuadrado,
+
+\[
+y[n] = x^2[n]
+\]
+
+de modo que todos los valores resulten positivos y las variaciones de mayor
+amplitud sean enfatizadas respecto de aquellas de menor amplitud.
+
+Finalmente, se realizó una integración mediante una ventana móvil de
+aproximadamente
+
+\[
+T_{\mathrm{ventana}} = 150~\mathrm{ms}
+\]
+
+con el objetivo de obtener una representación que considere tanto la amplitud
+como la duración temporal del complejo QRS.
+
+Las distintas etapas del algoritmo para ambos registros pueden observarse en
+las Figuras~\ref{fig:pan-etapas-pre} y~\ref{fig:pan-etapas-post}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/PanTompkins_Etapas_Pre.png}
+    \caption{Etapas del algoritmo de Pan--Tompkins aplicadas al ECG registrado en reposo}
+    \label{fig:pan-etapas-pre}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/PanTompkins_Etapas_Post.png}
+    \caption{Etapas del algoritmo de Pan--Tompkins aplicadas al ECG posterior a la actividad física}
+    \label{fig:pan-etapas-post}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Umbral adaptativo y detección de los picos R}
+
+Debido a que la amplitud de los complejos y el nivel de ruido no permanecen
+constantes durante toda la adquisición, especialmente en el registro posterior
+a la actividad física, no se utilizó un único umbral fijo para toda la señal.
+En cambio, se implementó un mecanismo de umbral adaptativo.
+
+Para ello se mantuvieron dos estimaciones que se actualizan a lo largo del
+registro: un nivel asociado a la señal de interés, representado mediante $s$,
+y un nivel asociado al ruido, representado mediante $v$. A partir de estas
+estimaciones se calculó continuamente un umbral de decisión, representado
+mediante la letra griega $\mu$, según
+
+\[
+\mu_1 = v + 0.25\left(s-v\right)
+\]
+
+De esta manera, el valor del umbral se modifica a lo largo del registro de
+acuerdo con las características locales de la señal. Cuando un máximo supera
+el umbral $\mu_1$, se lo considera como candidato a complejo QRS y se actualiza
+la estimación correspondiente a la señal de interés $s$. En cambio, cuando el
+máximo no supera dicho umbral, se lo considera inicialmente asociado al ruido
+y se actualiza la estimación $v$.
+
+Este procedimiento resulta particularmente importante para el registro
+posterior a la actividad física, donde la amplitud de los máximos obtenidos
+luego de la integración presenta variaciones a lo largo del tiempo. El uso de
+un umbral que se actualiza continuamente permite entonces adaptar el criterio
+de detección a estas modificaciones, evitando utilizar un único valor calculado
+para la totalidad del registro.
+
+Además, se incorporó un segundo umbral de menor amplitud,
+
+\[
+\mu_2 = 0.5\,\mu_1
+\]
+
+utilizado mediante un procedimiento de \textit{search-back}. Si transcurre un
+tiempo excesivamente prolongado respecto de los intervalos RR previamente
+detectados sin encontrarse un nuevo complejo QRS, el algoritmo revisa los
+máximos previamente descartados y permite recuperar aquellos que superan
+$\mu_2$. De esta forma se reduce la probabilidad de perder latidos de menor
+amplitud que inicialmente no hayan superado el umbral principal.
+
+Una vez identificado un complejo QRS sobre la señal integrada, la posición
+precisa del pico R se determinó buscando el máximo de amplitud correspondiente
+sobre la señal filtrada en una ventana temporal alrededor de la detección.
+
+También se tuvo en cuenta la presencia de saturaciones identificadas en el
+inciso anterior. Una detección localizada en proximidad de una región saturada
+no fue considerada como un pico R válido, dado que la forma real de la señal
+en esos intervalos no puede conocerse con certeza.
+
+Las detecciones finales obtenidas se presentan en las
+Figuras~\ref{fig:picos-r-pre} y~\ref{fig:picos-r-post}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/PanTompkins_Pre.png}
+    \caption{Detección de los picos R en el registro de ECG en reposo}
+    \label{fig:picos-r-pre}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/PanTompkins_Post.png}
+    \caption{Detección de los picos R en el registro de ECG posterior a la actividad física}
+    \label{fig:picos-r-post}
+\end{figure}
+
+\FloatBarrier
+
+La inspección visual de las detecciones permitió verificar una correspondencia
+adecuada entre los máximos identificados por el algoritmo y los complejos QRS
+observables en las señales. En particular, en el registro en reposo no se
+observan pérdidas sistemáticas de complejos ni múltiples detecciones sobre un
+mismo latido.
+
+\subsection{Cálculo de los intervalos RR y de la frecuencia cardíaca}
+
+Una vez determinadas las posiciones de los picos R, los intervalos RR se
+calcularon como la diferencia temporal entre dos detecciones consecutivas. Si
+$n_{R,i}$ representa la muestra correspondiente al $i$-ésimo pico R, el
+intervalo RR se obtiene mediante
+
+\[
+RR_i =
+\frac{n_{R,i}-n_{R,i-1}}{f_s}
+\]
+
+donde
+
+\[
+f_s = 480~\mathrm{Hz}
+\]
+
+es la frecuencia de muestreo utilizada durante la adquisición.
+
+A partir de cada intervalo RR puede obtenerse también una estimación de la
+frecuencia cardíaca instantánea mediante
+
+\[
+FC_i = \frac{60}{RR_i}
+\]
+
+donde $RR_i$ se expresa en segundos y $FC_i$ se obtiene en latidos por minuto.
+
+Las Figuras~\ref{fig:fc-pre} y~\ref{fig:fc-post} muestran la frecuencia
+cardíaca instantánea obtenida para ambos registros.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/FC_Pre.png}
+    \caption{Frecuencia cardíaca instantánea calculada a partir del ECG en reposo}
+    \label{fig:fc-pre}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/FC_Post.png}
+    \caption{Frecuencia cardíaca instantánea calculada a partir del ECG posterior a la actividad física}
+    \label{fig:fc-post}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Construcción de los tacogramas}
+
+El tacograma representa la duración de los intervalos RR sucesivos en función
+del tiempo y permite observar directamente las variaciones del período cardíaco
+a lo largo de la adquisición.
+
+Para cada intervalo RR se asignó como referencia temporal el instante
+correspondiente al segundo pico R que lo delimita. Los valores se expresaron
+en milisegundos para facilitar su interpretación.
+
+Los intervalos que atraviesan regiones identificadas previamente como
+saturadas fueron marcados como no válidos. Estos valores no se utilizaron para
+interpretar la variabilidad del ritmo cardíaco, ya que una pérdida de
+información durante la adquisición podría generar intervalos aparentemente
+anómalos que no representen una variación fisiológica real.
+
+Los tacogramas obtenidos se muestran en las
+Figuras~\ref{fig:tacograma-pre} y~\ref{fig:tacograma-post}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/Tacograma_Pre.png}
+    \caption{Tacograma correspondiente al registro de ECG en reposo}
+    \label{fig:tacograma-pre}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/Tacograma_Post.png}
+    \caption{Tacograma correspondiente al registro posterior a la actividad física}
+    \label{fig:tacograma-post}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Análisis del registro en reposo}
+
+En el tacograma correspondiente al estado de reposo puede observarse que los
+intervalos RR no permanecen constantes, sino que presentan variaciones a lo
+largo de todo el registro. Los valores se encuentran aproximadamente entre
+600 ms y 1000 ms, lo que corresponde a frecuencias cardíacas comprendidas
+aproximadamente entre 60 y 100 lat/min.
+
+A pesar de la dispersión aparente, las variaciones observadas no presentan el
+comportamiento característico de errores de detección. En particular, no se
+observan intervalos aproximadamente dobles respecto de los valores vecinos, que
+podrían indicar la pérdida de un complejo QRS, ni intervalos excesivamente
+cortos que sugieran una doble detección de un mismo latido.
+
+Además, las variaciones se producen de manera relativamente progresiva. En
+determinados sectores del registro los intervalos RR disminuyen durante varios
+latidos consecutivos y posteriormente vuelven a aumentar. Este comportamiento
+se refleja de manera inversa en la frecuencia cardíaca instantánea.
+
+Por lo tanto, la variación observada puede atribuirse principalmente a la
+variabilidad fisiológica del ritmo cardíaco. En condiciones de reposo, la
+frecuencia cardíaca no permanece estrictamente constante, sino que se encuentra
+modulada por la actividad del sistema nervioso autónomo y puede presentar
+variaciones asociadas, entre otros factores, al ciclo respiratorio. Sin embargo,
+dado que en este experimento no se registró simultáneamente una señal
+respiratoria, no resulta posible atribuir de manera directa las oscilaciones
+observadas exclusivamente a este fenómeno.
+
+\subsection{Análisis del registro posterior a la actividad física}
+
+En el registro posterior a la actividad física se observa un comportamiento
+diferente al registrado en reposo. Inmediatamente después del ejercicio los
+latidos se encuentran más próximos entre sí, lo que se traduce en intervalos
+RR menores y, en consecuencia, en una frecuencia cardíaca mayor.
+
+A medida que transcurre el registro, los intervalos RR tienden a aumentar,
+mientras que la frecuencia cardíaca disminuye progresivamente. Este
+comportamiento resulta consistente con el proceso de recuperación posterior al
+ejercicio: al finalizar la actividad física disminuye gradualmente la demanda
+metabólica y la frecuencia cardíaca comienza a retornar hacia valores más
+próximos a los correspondientes al reposo.
+
+La recuperación no ocurre de manera estrictamente monotónica. Sobre la
+tendencia general aparecen variaciones entre latidos consecutivos, asociadas a
+la variabilidad fisiológica del ritmo y a las condiciones propias de la
+adquisición inmediatamente posterior al ejercicio. Por este motivo, para
+analizar la evolución global resulta más relevante observar la tendencia del
+tacograma y de la frecuencia cardíaca a lo largo del registro que interpretar
+de manera aislada cada intervalo RR.
+
+El empleo de un umbral adaptativo resultó especialmente relevante en este
+registro, debido a que la amplitud de los máximos utilizados para detectar los
+QRS varía con el tiempo. La adaptación continua del umbral y el mecanismo de
+\textit{search-back} permitieron evitar que complejos de menor amplitud fueran
+descartados únicamente por encontrarse por debajo de un umbral fijo calculado
+para la totalidad del registro.
+
+\subsection{Comparación entre reposo y post-actividad}
+
+La comparación entre ambos estados muestra dos comportamientos claramente
+diferenciados. Durante el reposo, los intervalos RR oscilan alrededor de un
+nivel relativamente estable y las variaciones observadas corresponden
+principalmente a la variabilidad latido a latido.
+
+Luego de la actividad física, en cambio, los intervalos RR son inicialmente
+menores, indicando una frecuencia cardíaca elevada. Posteriormente se observa
+una tendencia hacia intervalos de mayor duración y, por lo tanto, hacia una
+reducción progresiva de la frecuencia cardíaca durante la recuperación.
+
+De esta forma, el tacograma permite representar de manera directa el cambio en
+la dinámica cardíaca producido por la actividad física. Mientras que en reposo
+predomina la variabilidad alrededor de un nivel aproximadamente estacionario,
+en el registro posterior al ejercicio aparece además una tendencia temporal
+asociada al retorno progresivo de la frecuencia cardíaca hacia el estado basal.
+
+% =========================
+% INCISO 7
+% =========================
+
+\section{Análisis espectral del tacograma mediante el periodograma de Lomb}
+
+A partir de los tacogramas obtenidos en el inciso anterior se realizó un análisis
+de la variabilidad de los intervalos RR en el dominio de la frecuencia. Para
+ello se utilizó el periodograma de Lomb.
+
+En este caso, cada valor del tacograma corresponde a un intervalo RR asociado
+al instante temporal de un pico R. Debido a que los latidos cardíacos no se
+producen en intervalos exactamente constantes, los puntos del tacograma tampoco
+se encuentran distribuidos de manera uniforme. Por este motivo, el método de
+Lomb permite estudiar directamente su contenido frecuencial sin necesidad de
+realizar previamente una interpolación sobre una grilla temporal uniforme.
+
+Antes de calcular el periodograma se consideraron únicamente los intervalos RR
+válidos. Aquellos intervalos que atravesaban regiones previamente identificadas
+como saturadas no fueron utilizados para el análisis espectral.
+
+\subsection{Preparación de los tacogramas}
+
+Para evitar que la componente continua asociada al valor medio de los intervalos
+RR domine la representación espectral, se eliminó el valor medio de cada
+tacograma.
+
+Además, en el registro posterior a la actividad física se observa una tendencia
+general asociada a la recuperación cardíaca, ya que los intervalos RR aumentan
+progresivamente a medida que disminuye la frecuencia cardíaca. Esta tendencia
+no representa una oscilación periódica de interés para el análisis de
+variabilidad, por lo que se eliminó también una tendencia lineal antes de
+calcular el periodograma.
+
+De esta manera, el análisis espectral se realizó principalmente sobre las
+variaciones de los intervalos RR alrededor de su tendencia general.
+
+El intervalo de frecuencias considerado se extendió aproximadamente desde la
+mínima frecuencia resoluble por la duración de los registros hasta
+
+\[
+f_{\mathrm{max}} = 0.5~\mathrm{Hz}
+\]
+
+La frecuencia mínima quedó determinada principalmente por el registro de menor
+duración, correspondiente al estado de reposo, de aproximadamente 60 s. Por lo
+tanto, la resolución frecuencial característica resulta del orden de
+
+\[
+\Delta f \approx \frac{1}{T}
+\]
+
+y para
+
+\[
+T \approx 60~\mathrm{s}
+\]
+
+se obtiene aproximadamente
+
+\[
+\Delta f \approx 0.017~\mathrm{Hz}
+\]
+
+Este valor debe tenerse en cuenta al interpretar con precisión la ubicación de
+los máximos espectrales.
+
+\subsection{Bandas de frecuencia analizadas}
+
+Para facilitar la interpretación de los resultados se identificaron las bandas
+de baja y alta frecuencia habitualmente utilizadas en el análisis espectral de
+la variabilidad de la frecuencia cardíaca.
+
+Se consideró como banda de baja frecuencia, o LF,
+
+\[
+0.04~\mathrm{Hz} \leq f < 0.15~\mathrm{Hz}
+\]
+
+y como banda de alta frecuencia, o HF,
+
+\[
+0.15~\mathrm{Hz} \leq f < 0.40~\mathrm{Hz}
+\]
+
+Las componentes por debajo de 0.04 Hz se encuentran dentro de una región de muy
+baja frecuencia. Debido a la duración limitada del registro en reposo, estas
+componentes deben interpretarse con precaución, ya que para frecuencias muy
+bajas se dispone de una cantidad reducida de ciclos dentro de la adquisición.
+
+\subsection{Periodograma correspondiente al estado de reposo}
+
+El periodograma obtenido para el registro en reposo se muestra en la
+Figura~\ref{fig:lomb-pre}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/Lomb_Pre.png}
+    \caption{Periodograma de Lomb correspondiente al registro de ECG en reposo}
+    \label{fig:lomb-pre}
+\end{figure}
+
+En este registro se observa una distribución espectral relativamente
+concentrada, con un máximo dominante alrededor de
+
+\[
+f_{\mathrm{dom,pre}} \approx 0.061~\mathrm{Hz}
+\]
+
+y una segunda componente de amplitud importante aproximadamente alrededor de
+
+\[
+f \approx 0.10~\mathrm{Hz}
+\]
+
+Ambas componentes se encuentran dentro de la banda LF. Esto resulta coherente
+con el comportamiento observado previamente en el tacograma, donde los
+intervalos RR presentaban oscilaciones relativamente suaves y organizadas a lo
+largo del tiempo.
+
+La frecuencia dominante de aproximadamente 0.061 Hz corresponde a un período
+del orden de
+
+\[
+T_{\mathrm{dom,pre}}
+=
+\frac{1}{0.061}
+\approx
+16.4~\mathrm{s}
+\]
+
+por lo que representa una variación relativamente lenta de los intervalos RR.
+
+Por encima de 0.15 Hz la potencia normalizada disminuye considerablemente,
+aunque permanecen algunas componentes de menor amplitud dentro de la banda HF.
+
+\subsection{Periodograma posterior a la actividad física}
+
+El resultado correspondiente al registro posterior a la actividad física se
+presenta en la Figura~\ref{fig:lomb-post}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/Lomb_Post.png}
+    \caption{Periodograma de Lomb correspondiente al registro posterior a la actividad física}
+    \label{fig:lomb-post}
+\end{figure}
+
+En este caso el contenido espectral aparece considerablemente más distribuido
+entre distintas frecuencias. A diferencia del registro en reposo, no se observa
+una única región de frecuencia con una predominancia tan marcada respecto del
+resto del espectro.
+
+El máximo del periodograma se encuentra aproximadamente en
+
+\[
+f_{\mathrm{dom,post}} \approx 0.037~\mathrm{Hz}
+\]
+
+correspondiente a un período aproximado de
+
+\[
+T_{\mathrm{dom,post}}
+=
+\frac{1}{0.037}
+\approx
+27~\mathrm{s}
+\]
+
+Esta frecuencia se encuentra ligeramente por debajo del límite inferior
+utilizado para definir la banda LF. Por este motivo, su interpretación debe
+realizarse con precaución.
+
+Aunque antes de calcular Lomb se eliminó una tendencia lineal del tacograma,
+la recuperación cardíaca posterior al ejercicio no necesariamente presenta una
+evolución estrictamente lineal. Por lo tanto, parte de la contribución
+espectral observada en frecuencias muy bajas puede encontrarse asociada a la
+dinámica lenta de recuperación y no necesariamente a una oscilación fisiológica
+periódica independiente.
+
+Además de esta componente de muy baja frecuencia, se observan varios máximos de
+menor amplitud distribuidos principalmente por debajo de aproximadamente
+0.2 Hz. Esto refleja un comportamiento espectral menos concentrado que el
+observado en reposo.
+
+\FloatBarrier
+
+\subsection{Comparación entre reposo y post-actividad}
+
+La comparación directa entre ambos periodogramas se presenta en la
+Figura~\ref{fig:lomb-comparacion}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/Lomb_Comparacion.png}
+    \caption{Comparación entre los periodogramas de Lomb correspondientes al estado de reposo y al período posterior a la actividad física}
+    \label{fig:lomb-comparacion}
+\end{figure}
+
+\FloatBarrier
+
+A partir de esta comparación pueden observarse diferencias claras entre ambos
+estados. En reposo, el contenido espectral se encuentra concentrado
+principalmente alrededor de algunas frecuencias bien definidas, destacándose
+las componentes cercanas a 0.061 Hz y 0.10 Hz.
+
+Luego de la actividad física, en cambio, el espectro presenta una distribución
+más dispersa, con múltiples máximos de menor amplitud relativa y una mayor
+contribución de componentes de muy baja frecuencia. Esto resulta consistente
+con el carácter no estacionario del registro posterior al ejercicio, durante
+el cual la frecuencia cardíaca se encuentra atravesando un proceso de
+recuperación.
+
+Debe tenerse en cuenta que los periodogramas utilizados fueron normalizados.
+Por este motivo, la diferencia en la altura absoluta de las curvas no debe
+interpretarse directamente como una diferencia de potencia física total entre
+ambos estados. La comparación resulta principalmente útil para analizar la
+posición de los máximos y la forma en que el contenido espectral se distribuye
+entre las distintas frecuencias.
+
+En consecuencia, mientras que en reposo se observan oscilaciones de los
+intervalos RR con componentes espectrales relativamente definidas, luego de la
+actividad física la dinámica cardíaca presenta un comportamiento menos
+estacionario y un contenido frecuencial más distribuido.
+
+% =========================
+% INCISO 8
+% =========================
+
+\section{Conclusiones}
+
+Los resultados obtenidos presentan, en términos generales, un comportamiento
+coherente con lo esperado desde el punto de vista fisiológico. En el registro
+realizado en reposo se observó una frecuencia cardíaca menor, con variaciones
+latido a latido reflejadas en los intervalos RR. Luego de la actividad física,
+en cambio, los intervalos RR resultaron inicialmente menores, indicando un
+aumento de la frecuencia cardíaca, seguido de una tendencia progresiva hacia
+valores más próximos a los registrados en reposo durante el período de
+recuperación.
+
+La aplicación del algoritmo de Pan--Tompkins permitió identificar
+satisfactoriamente los complejos QRS y construir los tacogramas de ambos
+registros. La utilización de un umbral adaptativo resultó especialmente
+importante para el registro posterior al ejercicio, debido a las variaciones
+de amplitud presentes a lo largo de la adquisición.
+
+El análisis mediante el periodograma de Lomb mostró también diferencias entre
+ambos estados. En reposo se observaron componentes espectrales más definidas,
+mientras que luego de la actividad física el contenido frecuencial resultó más
+distribuido y con mayor presencia de componentes lentas, consistente con el
+carácter no estacionario del proceso de recuperación cardíaca.
+
+Por lo tanto, los resultados obtenidos se corresponden cualitativamente con lo
+esperado: la actividad física produce un aumento de la frecuencia cardíaca y,
+una vez finalizado el ejercicio, se observa una recuperación progresiva hacia
+el estado basal. Las diferencias observadas respecto de un comportamiento
+ideal pueden atribuirse tanto a la variabilidad fisiológica propia del ritmo
+cardíaco como a las condiciones experimentales de adquisición, incluyendo
+movimientos, variaciones del contacto electrodo--piel y algunos segmentos de
+saturación.
 
 % =========================
 % BIBLIOGRAFÍA

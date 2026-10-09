@@ -1311,7 +1311,9 @@ print("ecg_data_post_procesado.csv")
 
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 from scipy import signal
 
 
@@ -1319,30 +1321,41 @@ from scipy import signal
 # CARPETA DE SALIDA DE IMÁGENES
 # ============================================================
 
-CARPETA_IMAGENES = "Imagenes"
-
-# Si la carpeta no existe, se crea automáticamente
-os.makedirs(CARPETA_IMAGENES, exist_ok=True)
+CARPETA_IMAGENES = Path("Imagenes")
+CARPETA_IMAGENES.mkdir(exist_ok=True)
 
 
 # ============================================================
-# FUNCIÓN PAN-TOMPKINS
+# FUNCIÓN PAN-TOMPKINS CON UMBRAL ADAPTATIVO Y SEARCH-BACK
 # ============================================================
 
 def pan_tompkins(ecg, fs, mascara_saturacion=None):
+    """
+    Implementación de Pan-Tompkins adaptada al presente trabajo.
+
+    Etapas:
+    1) filtrado pasa-banda 5-15 Hz,
+    2) derivada,
+    3) elevación al cuadrado,
+    4) integración por ventana móvil de 150 ms,
+    5) detección de máximos candidatos,
+    6) umbral adaptativo SPKI/NPKI,
+    7) search-back para recuperar latidos de menor amplitud,
+    8) localización del pico R sobre la señal pasa-banda,
+    9) exclusión de detecciones próximas a saturación.
+    """
 
     ecg = np.asarray(ecg, dtype=float).flatten()
 
+    if mascara_saturacion is not None:
+        mascara_saturacion = np.asarray(
+            mascara_saturacion,
+            dtype=bool
+        )
 
     # --------------------------------------------------------
     # 1. FILTRO PASA-BANDA
     # --------------------------------------------------------
-    # El complejo QRS concentra gran parte de su contenido
-    # energético en este rango de frecuencias.
-    #
-    # Aunque el ECG ya fue previamente acondicionado,
-    # este filtrado forma parte de la etapa de detección
-    # del algoritmo Pan-Tompkins.
 
     f_low = 5.0
     f_high = 15.0
@@ -1360,11 +1373,9 @@ def pan_tompkins(ecg, fs, mascara_saturacion=None):
         ecg
     )
 
-
     # --------------------------------------------------------
     # 2. FILTRO DERIVATIVO
     # --------------------------------------------------------
-    # Resalta las pendientes rápidas presentes en el QRS.
 
     kernel_derivada = np.array(
         [1, 2, 0, -2, -1]
@@ -1376,28 +1387,18 @@ def pan_tompkins(ecg, fs, mascara_saturacion=None):
         mode="same"
     )
 
-
     # --------------------------------------------------------
     # 3. ELEVACIÓN AL CUADRADO
     # --------------------------------------------------------
-    # Hace positivos todos los valores y aumenta el peso
-    # relativo de las pendientes de mayor amplitud.
 
     ecg_cuadrado = ecg_derivada ** 2
 
-
     # --------------------------------------------------------
-    # 4. INTEGRACIÓN MEDIANTE VENTANA MÓVIL
+    # 4. INTEGRACIÓN POR VENTANA MÓVIL
     # --------------------------------------------------------
-    # Se utiliza una ventana aproximada de 150 ms.
 
     ventana_seg = 0.150
-
-    N = max(
-        1,
-        int(ventana_seg * fs)
-    )
-
+    N = max(1, int(ventana_seg * fs))
     ventana = np.ones(N) / N
 
     ecg_integrado = signal.convolve(
@@ -1406,86 +1407,237 @@ def pan_tompkins(ecg, fs, mascara_saturacion=None):
         mode="same"
     )
 
-
     # --------------------------------------------------------
-    # 5. DETECCIÓN DE PICOS CANDIDATOS
+    # 5. PICOS CANDIDATOS
     # --------------------------------------------------------
-    # Distancia mínima de 250 ms entre complejos.
-    #
-    # Esto equivale aproximadamente a una FC máxima de
-    # 240 lat/min.
+    # Se usa un período refractario de 200 ms. La decisión de
+    # si un máximo pertenece a QRS o ruido se toma luego con
+    # el umbral adaptativo.
 
-    distancia_minima = int(
-        0.25 * fs
-    )
+    periodo_refractario = int(0.200 * fs)
 
-    picos_candidatos, propiedades = signal.find_peaks(
+    picos_candidatos, _ = signal.find_peaks(
         ecg_integrado,
-        distance=distancia_minima
+        distance=periodo_refractario
     )
-
-
-    # --------------------------------------------------------
-    # CASO SIN DETECCIONES
-    # --------------------------------------------------------
 
     if len(picos_candidatos) == 0:
-
         return {
             "bandpass": ecg_bp,
             "derivada": ecg_derivada,
             "cuadrado": ecg_cuadrado,
             "integrado": ecg_integrado,
+            "picos_candidatos": np.array([], dtype=int),
             "picos_integrados": np.array([], dtype=int),
+            "picos_searchback": np.array([], dtype=int),
             "picos_r": np.array([], dtype=int),
             "rr": np.array([]),
             "fc": np.array([]),
-            "umbral": 0
+            "umbral": np.zeros(len(ecg)),
+            "umbral_secundario": np.zeros(len(ecg))
         }
 
+    amplitudes = ecg_integrado[picos_candidatos]
 
     # --------------------------------------------------------
-    # 6. UMBRAL ADAPTATIVO
+    # 6. INICIALIZACIÓN DEL UMBRAL ADAPTATIVO
     # --------------------------------------------------------
-    # Se estima un nivel representativo del ruido y otro
-    # asociado a los picos de señal.
+    # Se utilizan los primeros 2 s para estimar inicialmente
+    # el nivel de ruido (NPKI) y el nivel de señal QRS (SPKI).
+    # Si hubiera pocos máximos en ese intervalo se emplean los
+    # primeros candidatos disponibles.
 
-    amplitudes = ecg_integrado[
-        picos_candidatos
-    ]
+    fin_inicializacion = int(2.0 * fs)
+    mascara_inicial = picos_candidatos <= fin_inicializacion
+    amplitudes_iniciales = amplitudes[mascara_inicial]
 
-    nivel_ruido = np.percentile(
-        amplitudes,
-        25
+    if len(amplitudes_iniciales) < 3:
+        amplitudes_iniciales = amplitudes[:min(8, len(amplitudes))]
+
+    NPKI = np.percentile(amplitudes_iniciales, 25)
+    SPKI = np.percentile(amplitudes_iniciales, 75)
+
+    if SPKI <= NPKI:
+        SPKI = np.max(amplitudes_iniciales)
+
+    THRESHOLD_I1 = NPKI + 0.25 * (SPKI - NPKI)
+    THRESHOLD_I2 = 0.5 * THRESHOLD_I1
+
+    # Factores clásicos de actualización exponencial.
+    alpha = 0.125
+
+    picos_integrados = []
+    picos_searchback = []
+
+    # Se guardan candidatos clasificados inicialmente como ruido
+    # para que puedan recuperarse mediante search-back.
+    candidatos_ruido = []
+
+    # Historial RR en muestras para estimar cuándo falta un latido.
+    rr_historial = []
+    ultimo_qrs = None
+
+    # Umbral usado en cada máximo candidato, para poder mostrar
+    # gráficamente cómo se adapta a lo largo del registro.
+    umbral_en_candidatos = []
+    umbral2_en_candidatos = []
+
+    for pico, amplitud in zip(picos_candidatos, amplitudes):
+
+        # ----------------------------------------------------
+        # SEARCH-BACK
+        # ----------------------------------------------------
+        # Si el tiempo desde el último QRS supera 1.66 veces el
+        # RR de referencia, se revisan los picos que habían sido
+        # clasificados como ruido. Se acepta el de mayor amplitud
+        # que supere el umbral secundario.
+
+        if ultimo_qrs is not None and len(rr_historial) >= 2:
+
+            rr_referencia = np.mean(rr_historial[-8:])
+            rr_limite = 1.66 * rr_referencia
+
+            while pico - ultimo_qrs > rr_limite:
+
+                elegibles = [
+                    item for item in candidatos_ruido
+                    if (
+                        item[0] > ultimo_qrs + periodo_refractario
+                        and item[0] < pico - periodo_refractario
+                        and item[1] >= THRESHOLD_I2
+                    )
+                ]
+
+                if len(elegibles) == 0:
+                    break
+
+                pico_sb, amplitud_sb = max(
+                    elegibles,
+                    key=lambda item: item[1]
+                )
+
+                picos_integrados.append(pico_sb)
+                picos_searchback.append(pico_sb)
+
+                nuevo_rr = pico_sb - ultimo_qrs
+                rr_historial.append(nuevo_rr)
+                ultimo_qrs = pico_sb
+
+                SPKI = (
+                    alpha * amplitud_sb
+                    + (1 - alpha) * SPKI
+                )
+
+                THRESHOLD_I1 = NPKI + 0.25 * (SPKI - NPKI)
+                THRESHOLD_I2 = 0.5 * THRESHOLD_I1
+
+                candidatos_ruido = [
+                    item for item in candidatos_ruido
+                    if item[0] != pico_sb
+                ]
+
+                rr_referencia = np.mean(rr_historial[-8:])
+                rr_limite = 1.66 * rr_referencia
+
+        # Guardar el umbral que corresponde a este instante.
+        umbral_en_candidatos.append(THRESHOLD_I1)
+        umbral2_en_candidatos.append(THRESHOLD_I2)
+
+        # ----------------------------------------------------
+        # CLASIFICACIÓN DEL CANDIDATO ACTUAL
+        # ----------------------------------------------------
+
+        supera_umbral = amplitud >= THRESHOLD_I1
+
+        respeta_refractario = (
+            ultimo_qrs is None
+            or pico - ultimo_qrs >= periodo_refractario
+        )
+
+        if supera_umbral and respeta_refractario:
+
+            picos_integrados.append(pico)
+
+            if ultimo_qrs is not None:
+                rr_historial.append(pico - ultimo_qrs)
+
+            ultimo_qrs = pico
+
+            SPKI = (
+                alpha * amplitud
+                + (1 - alpha) * SPKI
+            )
+
+        else:
+
+            candidatos_ruido.append((pico, amplitud))
+
+            NPKI = (
+                alpha * amplitud
+                + (1 - alpha) * NPKI
+            )
+
+        THRESHOLD_I1 = NPKI + 0.25 * (SPKI - NPKI)
+        THRESHOLD_I2 = 0.5 * THRESHOLD_I1
+
+    # Ordenar y eliminar duplicados que pudieran provenir del search-back.
+    picos_integrados = np.array(
+        sorted(set(picos_integrados)),
+        dtype=int
     )
 
-    nivel_senal = np.percentile(
-        amplitudes,
-        90
+    picos_searchback = np.array(
+        sorted(set(picos_searchback)),
+        dtype=int
     )
-
-    umbral = nivel_ruido + 0.25 * (
-        nivel_senal - nivel_ruido
-    )
-
-    picos_integrados = picos_candidatos[
-        amplitudes >= umbral
-    ]
-
 
     # --------------------------------------------------------
-    # 7. LOCALIZACIÓN EXACTA DEL PICO R
+    # TRAZA TEMPORAL DEL UMBRAL
     # --------------------------------------------------------
-    # El máximo de la señal integrada no necesariamente
-    # coincide temporalmente con el pico R.
-    #
-    # Se busca entonces el máximo absoluto del ECG filtrado
-    # en una ventana alrededor de cada detección.
 
-    ventana_busqueda = int(
-        0.150 * fs
+    umbral_en_candidatos = np.asarray(
+        umbral_en_candidatos,
+        dtype=float
     )
 
+    umbral2_en_candidatos = np.asarray(
+        umbral2_en_candidatos,
+        dtype=float
+    )
+
+    indices = np.arange(len(ecg_integrado))
+
+    if len(picos_candidatos) == 1:
+        umbral_traza = np.full(
+            len(ecg_integrado),
+            umbral_en_candidatos[0]
+        )
+        umbral2_traza = np.full(
+            len(ecg_integrado),
+            umbral2_en_candidatos[0]
+        )
+    else:
+        umbral_traza = np.interp(
+            indices,
+            picos_candidatos,
+            umbral_en_candidatos,
+            left=umbral_en_candidatos[0],
+            right=umbral_en_candidatos[-1]
+        )
+
+        umbral2_traza = np.interp(
+            indices,
+            picos_candidatos,
+            umbral2_en_candidatos,
+            left=umbral2_en_candidatos[0],
+            right=umbral2_en_candidatos[-1]
+        )
+
+    # --------------------------------------------------------
+    # 7. LOCALIZACIÓN DEL PICO R EN LA SEÑAL PASA-BANDA
+    # --------------------------------------------------------
+
+    ventana_busqueda = int(0.150 * fs)
     picos_r = []
 
     for pico in picos_integrados:
@@ -1497,19 +1649,13 @@ def pan_tompkins(ecg, fs, mascara_saturacion=None):
 
         fin = min(
             len(ecg_bp),
-            pico + ventana_busqueda
+            pico + ventana_busqueda + 1
         )
 
-        segmento = ecg_bp[
-            inicio:fin
-        ]
+        segmento = ecg_bp[inicio:fin]
 
         if len(segmento) == 0:
             continue
-
-
-        # Se utiliza valor absoluto porque el QRS puede
-        # encontrarse orientado positiva o negativamente.
 
         indice_local = np.argmax(
             np.abs(segmento)
@@ -1517,10 +1663,11 @@ def pan_tompkins(ecg, fs, mascara_saturacion=None):
 
         pico_r = inicio + indice_local
 
-
         # ----------------------------------------------------
         # EXCLUSIÓN DE ZONAS SATURADAS
         # ----------------------------------------------------
+        # Si existe saturación en +/-100 ms alrededor del pico,
+        # la detección no se utiliza como pico R válido.
 
         if mascara_saturacion is not None:
 
@@ -1531,27 +1678,20 @@ def pan_tompkins(ecg, fs, mascara_saturacion=None):
 
             sat_fin = min(
                 len(mascara_saturacion),
-                pico_r + int(0.10 * fs)
+                pico_r + int(0.10 * fs) + 1
             )
 
             if np.any(
-                mascara_saturacion[
-                    sat_inicio:sat_fin
-                ]
+                mascara_saturacion[sat_inicio:sat_fin]
             ):
                 continue
 
+        picos_r.append(pico_r)
 
-        picos_r.append(
-            pico_r
-        )
-
-
-    picos_r = np.array(
+    picos_r = np.asarray(
         picos_r,
         dtype=int
     )
-
 
     # --------------------------------------------------------
     # 8. ELIMINACIÓN DE DETECCIONES DUPLICADAS
@@ -1559,86 +1699,51 @@ def pan_tompkins(ecg, fs, mascara_saturacion=None):
 
     if len(picos_r) > 1:
 
-        picos_r = np.sort(
-            picos_r
-        )
-
-        picos_limpios = [
-            picos_r[0]
-        ]
+        picos_r = np.sort(picos_r)
+        picos_limpios = [picos_r[0]]
 
         for pico in picos_r[1:]:
 
             anterior = picos_limpios[-1]
 
-            if (
-                pico - anterior
-                >= distancia_minima
-            ):
-
-                picos_limpios.append(
-                    pico
-                )
+            if pico - anterior >= periodo_refractario:
+                picos_limpios.append(pico)
 
             else:
-
-                # Si aparecen dos detecciones demasiado
-                # próximas se conserva la de mayor amplitud.
-
-                if (
-                    abs(ecg_bp[pico])
-                    >
-                    abs(ecg_bp[anterior])
-                ):
-
+                # Si dos detecciones quedan demasiado próximas,
+                # conservar la de mayor amplitud en el pasa-banda.
+                if abs(ecg_bp[pico]) > abs(ecg_bp[anterior]):
                     picos_limpios[-1] = pico
 
-
-        picos_r = np.array(
+        picos_r = np.asarray(
             picos_limpios,
             dtype=int
         )
 
-
     # --------------------------------------------------------
-    # 9. INTERVALOS RR
-    # --------------------------------------------------------
-
-    rr = np.diff(
-        picos_r
-    ) / fs
-
-
-    # --------------------------------------------------------
-    # 10. FRECUENCIA CARDÍACA INSTANTÁNEA
+    # 9. INTERVALOS RR Y FRECUENCIA CARDÍACA
     # --------------------------------------------------------
 
-    fc = 60.0 / rr
+    rr = np.diff(picos_r) / fs
 
-
-    # --------------------------------------------------------
-    # DEVOLVER RESULTADOS
-    # --------------------------------------------------------
+    if len(rr) > 0:
+        fc = 60.0 / rr
+    else:
+        fc = np.array([])
 
     return {
-
         "bandpass": ecg_bp,
-
         "derivada": ecg_derivada,
-
         "cuadrado": ecg_cuadrado,
-
         "integrado": ecg_integrado,
-
+        "picos_candidatos": picos_candidatos,
         "picos_integrados": picos_integrados,
-
+        "picos_searchback": picos_searchback,
         "picos_r": picos_r,
-
         "rr": rr,
-
         "fc": fc,
-
-        "umbral": umbral
+        "umbral": umbral_traza,
+        "umbral_secundario": umbral2_traza
     }
 
 
@@ -1663,103 +1768,77 @@ resultado_post = pan_tompkins(
 # EXTRAER RESULTADOS
 # ============================================================
 
-picos_r_pre = resultado_pre[
-    "picos_r"
-]
+picos_r_pre = resultado_pre["picos_r"]
+picos_r_post = resultado_post["picos_r"]
 
-picos_r_post = resultado_post[
-    "picos_r"
-]
+rr_pre = resultado_pre["rr"]
+rr_post = resultado_post["rr"]
 
-rr_pre = resultado_pre[
-    "rr"
-]
-
-rr_post = resultado_post[
-    "rr"
-]
-
-fc_pre = resultado_pre[
-    "fc"
-]
-
-fc_post = resultado_post[
-    "fc"
-]
+fc_pre = resultado_pre["fc"]
+fc_post = resultado_post["fc"]
 
 
 # ============================================================
-# MOSTRAR RESULTADOS NUMÉRICOS
+# RESULTADOS NUMÉRICOS DE PAN-TOMPKINS
 # ============================================================
 
-print("\n")
-print("==============================")
+print("\n==============================")
 print("ECG PRE-ACTIVIDAD")
 print("==============================")
-
 print(
     "Cantidad de complejos QRS detectados:",
     len(picos_r_pre)
 )
+print(
+    "Detecciones recuperadas por search-back:",
+    len(resultado_pre["picos_searchback"])
+)
 
 if len(rr_pre) > 0:
+    print(f"RR medio: {np.mean(rr_pre):.3f} s")
+    print(f"FC media: {np.mean(fc_pre):.2f} lat/min")
+    print(f"FC mínima: {np.min(fc_pre):.2f} lat/min")
+    print(f"FC máxima: {np.max(fc_pre):.2f} lat/min")
 
-    print(
-        f"RR medio: "
-        f"{np.mean(rr_pre):.3f} s"
-    )
-
-    print(
-        f"FC media: "
-        f"{np.mean(fc_pre):.2f} lat/min"
-    )
-
-    print(
-        f"FC mínima: "
-        f"{np.min(fc_pre):.2f} lat/min"
-    )
-
-    print(
-        f"FC máxima: "
-        f"{np.max(fc_pre):.2f} lat/min"
-    )
-
-
-print("\n")
-print("==============================")
+print("\n==============================")
 print("ECG POST-ACTIVIDAD")
 print("==============================")
-
 print(
     "Cantidad de complejos QRS detectados:",
     len(picos_r_post)
 )
+print(
+    "Detecciones recuperadas por search-back:",
+    len(resultado_post["picos_searchback"])
+)
 
 if len(rr_post) > 0:
-
-    print(
-        f"RR medio: "
-        f"{np.mean(rr_post):.3f} s"
-    )
-
-    print(
-        f"FC media: "
-        f"{np.mean(fc_post):.2f} lat/min"
-    )
-
-    print(
-        f"FC mínima: "
-        f"{np.min(fc_post):.2f} lat/min"
-    )
-
-    print(
-        f"FC máxima: "
-        f"{np.max(fc_post):.2f} lat/min"
-    )
+    print(f"RR medio: {np.mean(rr_post):.3f} s")
+    print(f"FC media: {np.mean(fc_post):.2f} lat/min")
+    print(f"FC mínima: {np.min(fc_post):.2f} lat/min")
+    print(f"FC máxima: {np.max(fc_post):.2f} lat/min")
 
 
 # ============================================================
-# FUNCIÓN PARA GRAFICAR LAS ETAPAS DE PAN-TOMPKINS
+# FUNCIÓN AUXILIAR PARA GUARDAR IMÁGENES
+# ============================================================
+
+def guardar_imagen(nombre_archivo):
+    ruta = CARPETA_IMAGENES / nombre_archivo
+
+    plt.tight_layout()
+
+    plt.savefig(
+        ruta,
+        dpi=300,
+        bbox_inches="tight"
+    )
+
+    print(f"Imagen guardada en: {ruta}")
+
+
+# ============================================================
+# GRÁFICO DE LAS ETAPAS DE PAN-TOMPKINS
 # ============================================================
 
 def graficar_pan_tompkins(
@@ -1770,10 +1849,7 @@ def graficar_pan_tompkins(
     nombre_archivo
 ):
 
-    t = np.arange(
-        len(ecg)
-    ) / fs
-
+    t = np.arange(len(ecg)) / fs
 
     fig, axes = plt.subplots(
         5,
@@ -1782,103 +1858,47 @@ def graficar_pan_tompkins(
         sharex=True
     )
 
-
-    # --------------------------------------------------------
-    # ECG PROCESADO
-    # --------------------------------------------------------
-
+    # ECG preprocesado
     axes[0].plot(
         t,
         ecg,
         linewidth=0.8
     )
+    axes[0].set_ylabel("Amplitud")
+    axes[0].set_title(f"{titulo} - ECG procesado")
+    axes[0].grid(True, alpha=0.3)
 
-    axes[0].set_ylabel(
-        "Amplitud"
-    )
-
-    axes[0].set_title(
-        f"{titulo} - ECG procesado"
-    )
-
-    axes[0].grid(
-        True
-    )
-
-
-    # --------------------------------------------------------
-    # FILTRO PASA-BANDA
-    # --------------------------------------------------------
-
+    # Pasa-banda
     axes[1].plot(
         t,
         resultado["bandpass"],
         linewidth=0.8
     )
+    axes[1].set_ylabel("Amplitud")
+    axes[1].set_title("Filtrado pasa-banda 5-15 Hz")
+    axes[1].grid(True, alpha=0.3)
 
-    axes[1].set_ylabel(
-        "Amplitud"
-    )
-
-    axes[1].set_title(
-        "Filtrado pasa-banda 5-15 Hz"
-    )
-
-    axes[1].grid(
-        True
-    )
-
-
-    # --------------------------------------------------------
-    # DERIVADA
-    # --------------------------------------------------------
-
+    # Derivada
     axes[2].plot(
         t,
         resultado["derivada"],
         linewidth=0.8
     )
+    axes[2].set_ylabel("Amplitud")
+    axes[2].set_title("Filtro derivativo")
+    axes[2].grid(True, alpha=0.3)
 
-    axes[2].set_ylabel(
-        "Amplitud"
-    )
-
-    axes[2].set_title(
-        "Filtro derivativo"
-    )
-
-    axes[2].grid(
-        True
-    )
-
-
-    # --------------------------------------------------------
-    # CUADRADO
-    # --------------------------------------------------------
-
+    # Cuadrado
     axes[3].plot(
         t,
         resultado["cuadrado"],
         linewidth=0.8
     )
+    axes[3].set_ylabel("Amplitud")
+    axes[3].set_title("Elevación al cuadrado")
+    axes[3].grid(True, alpha=0.3)
 
-    axes[3].set_ylabel(
-        "Amplitud"
-    )
-
-    axes[3].set_title(
-        "Elevación al cuadrado"
-    )
-
-    axes[3].grid(
-        True
-    )
-
-
-    # --------------------------------------------------------
-    # INTEGRACIÓN POR VENTANA MÓVIL
-    # --------------------------------------------------------
-
+    # Integración y umbral adaptativo
     axes[4].plot(
         t,
         resultado["integrado"],
@@ -1886,89 +1906,50 @@ def graficar_pan_tompkins(
         label="Señal integrada"
     )
 
-    axes[4].axhline(
+    axes[4].plot(
+        t,
         resultado["umbral"],
         linestyle="--",
-        label="Umbral de detección"
+        linewidth=1.2,
+        label="Umbral adaptativo"
     )
 
-
-    if len(
-        resultado["picos_integrados"]
-    ) > 0:
+    if len(resultado["picos_integrados"]) > 0:
+        picos = resultado["picos_integrados"]
 
         axes[4].scatter(
-
-            resultado[
-                "picos_integrados"
-            ] / fs,
-
-            resultado[
-                "integrado"
-            ][
-                resultado[
-                    "picos_integrados"
-                ]
-            ],
-
+            picos / fs,
+            resultado["integrado"][picos],
             marker="x",
-
             s=45,
-
             label="QRS detectados"
         )
 
+    if len(resultado["picos_searchback"]) > 0:
+        picos_sb = resultado["picos_searchback"]
 
-    axes[4].set_ylabel(
-        "Amplitud"
-    )
+        axes[4].scatter(
+            picos_sb / fs,
+            resultado["integrado"][picos_sb],
+            marker="o",
+            facecolors="none",
+            s=70,
+            label="Recuperados por search-back"
+        )
 
-    axes[4].set_xlabel(
-        "Tiempo [s]"
-    )
-
-    axes[4].set_title(
-        "Integración por ventana móvil"
-    )
-
-    axes[4].grid(
-        True
-    )
-
+    axes[4].set_ylabel("Amplitud")
+    axes[4].set_xlabel("Tiempo [s]")
+    axes[4].set_title("Integración por ventana móvil y umbral adaptativo")
+    axes[4].grid(True, alpha=0.3)
     axes[4].legend()
 
-
-    plt.tight_layout()
-
-
-    # --------------------------------------------------------
-    # GUARDAR IMAGEN
-    # --------------------------------------------------------
-
-    ruta = os.path.join(
-        CARPETA_IMAGENES,
-        nombre_archivo
-    )
-
-    plt.savefig(
-        ruta,
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-
-    print(
-        f"Imagen guardada en: {ruta}"
-    )
-
-
+    guardar_imagen(nombre_archivo)
     plt.show()
-
-    plt.close()
+    plt.close(fig)
 
 
 # ============================================================
-# GRAFICAR Y GUARDAR ETAPAS DE PAN-TOMPKINS
+# GRAFICAR ETAPAS DE PAN-TOMPKINS
 # ============================================================
 
 graficar_pan_tompkins(
@@ -1978,7 +1959,6 @@ graficar_pan_tompkins(
     "ECG pre-actividad",
     "PanTompkins_Etapas_Pre.png"
 )
-
 
 graficar_pan_tompkins(
     ecg_post_final,
@@ -2001,15 +1981,9 @@ def graficar_picos_r(
     nombre_archivo
 ):
 
-    t = np.arange(
-        len(ecg)
-    ) / fs
+    t = np.arange(len(ecg)) / fs
 
-
-    plt.figure(
-        figsize=(14, 5)
-    )
-
+    plt.figure(figsize=(14, 5))
 
     plt.plot(
         t,
@@ -2018,77 +1992,26 @@ def graficar_picos_r(
         label="ECG procesado"
     )
 
-
     if len(picos_r) > 0:
-
         plt.scatter(
-
             picos_r / fs,
-
-            ecg[
-                picos_r
-            ],
-
+            ecg[picos_r],
             marker="x",
-
             s=60,
-
             label="Picos R",
-
             zorder=3
         )
 
-
-    plt.xlabel(
-        "Tiempo [s]"
-    )
-
-    plt.ylabel(
-        "Amplitud"
-    )
-
-    plt.title(
-        titulo
-    )
-
-    plt.grid(
-        True
-    )
-
+    plt.xlabel("Tiempo [s]")
+    plt.ylabel("Amplitud")
+    plt.title(titulo)
+    plt.grid(True, alpha=0.3)
     plt.legend()
 
-    plt.tight_layout()
-
-
-    # --------------------------------------------------------
-    # GUARDAR IMAGEN
-    # --------------------------------------------------------
-
-    ruta = os.path.join(
-        CARPETA_IMAGENES,
-        nombre_archivo
-    )
-
-    plt.savefig(
-        ruta,
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-
-    print(
-        f"Imagen guardada en: {ruta}"
-    )
-
-
+    guardar_imagen(nombre_archivo)
     plt.show()
-
     plt.close()
 
-
-# ============================================================
-# GRÁFICOS FINALES CON PICOS R
-# ============================================================
 
 graficar_picos_r(
     ecg_pre_final,
@@ -2097,7 +2020,6 @@ graficar_picos_r(
     "Detección de picos R - ECG pre-actividad",
     "PanTompkins_Pre.png"
 )
-
 
 graficar_picos_r(
     ecg_post_final,
@@ -2121,84 +2043,33 @@ def graficar_frecuencia_cardiaca(
 ):
 
     if len(fc) == 0:
-
         print(
-            f"No hay suficientes detecciones "
-            f"para generar {nombre_archivo}"
+            f"No hay suficientes detecciones para generar "
+            f"{nombre_archivo}"
         )
-
         return
 
+    tiempo_fc = picos_r[1:] / fs
 
-    # Cada valor de FC corresponde al intervalo entre
-    # dos picos R consecutivos.
-
-    tiempo_fc = (
-        picos_r[1:] / fs
-    )
-
-
-    plt.figure(
-        figsize=(12, 4)
-    )
-
+    plt.figure(figsize=(12, 4))
 
     plt.plot(
         tiempo_fc,
         fc,
         marker="o",
+        markersize=4,
         linewidth=1
     )
 
+    plt.xlabel("Tiempo [s]")
+    plt.ylabel("Frecuencia cardíaca [lat/min]")
+    plt.title(titulo)
+    plt.grid(True, alpha=0.3)
 
-    plt.xlabel(
-        "Tiempo [s]"
-    )
-
-    plt.ylabel(
-        "Frecuencia cardíaca [lat/min]"
-    )
-
-    plt.title(
-        titulo
-    )
-
-    plt.grid(
-        True
-    )
-
-    plt.tight_layout()
-
-
-    # --------------------------------------------------------
-    # GUARDAR IMAGEN
-    # --------------------------------------------------------
-
-    ruta = os.path.join(
-        CARPETA_IMAGENES,
-        nombre_archivo
-    )
-
-    plt.savefig(
-        ruta,
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-
-    print(
-        f"Imagen guardada en: {ruta}"
-    )
-
-
+    guardar_imagen(nombre_archivo)
     plt.show()
-
     plt.close()
 
-
-# ============================================================
-# FRECUENCIA CARDÍACA PRE-ACTIVIDAD
-# ============================================================
 
 graficar_frecuencia_cardiaca(
     picos_r_pre,
@@ -2208,15 +2079,1229 @@ graficar_frecuencia_cardiaca(
     "FC_Pre.png"
 )
 
-
-# ============================================================
-# FRECUENCIA CARDÍACA POST-ACTIVIDAD
-# ============================================================
-
 graficar_frecuencia_cardiaca(
     picos_r_post,
     fc_post,
     FS,
     "Frecuencia cardíaca instantánea - Post-actividad",
     "FC_Post.png"
+)
+
+
+# ============================================================
+# INCISO 6 - TACOGRAMAS
+# ============================================================
+
+
+def construir_tacograma(
+    picos_r,
+    fs,
+    mascara_saturacion=None
+):
+    """
+    Construye el tacograma a partir de los picos R válidos.
+
+    Cada intervalo RR se asocia temporalmente al segundo pico R
+    que lo delimita. Si un intervalo atraviesa una región de
+    saturación, se conserva para referencia pero se marca como
+    no válido para el análisis fisiológico.
+    """
+
+    picos_r = np.asarray(
+        picos_r,
+        dtype=int
+    )
+
+    if len(picos_r) < 2:
+        return (
+            np.array([]),
+            np.array([]),
+            np.array([], dtype=bool)
+        )
+
+    rr = np.diff(picos_r) / fs
+    tiempo_rr = picos_r[1:] / fs
+
+    validos = np.ones(
+        len(rr),
+        dtype=bool
+    )
+
+    if mascara_saturacion is not None:
+
+        mascara_saturacion = np.asarray(
+            mascara_saturacion,
+            dtype=bool
+        )
+
+        for i in range(len(rr)):
+
+            inicio = picos_r[i]
+            fin = picos_r[i + 1] + 1
+
+            if np.any(
+                mascara_saturacion[inicio:fin]
+            ):
+                validos[i] = False
+
+    return (
+        tiempo_rr,
+        rr,
+        validos
+    )
+
+
+# ============================================================
+# CONSTRUCCIÓN DE LOS TACOGRAMAS
+# ============================================================
+
+tiempo_rr_pre, rr_tac_pre, validos_pre = construir_tacograma(
+    picos_r_pre,
+    FS,
+    mascara_saturacion=sat_pre
+)
+
+tiempo_rr_post, rr_tac_post, validos_post = construir_tacograma(
+    picos_r_post,
+    FS,
+    mascara_saturacion=sat_post
+)
+
+
+# ============================================================
+# INFORMACIÓN DE LOS TACOGRAMAS
+# ============================================================
+
+print("\n==============================")
+print("TACOGRAMA PRE-ACTIVIDAD")
+print("==============================")
+print(
+    "Cantidad total de intervalos RR:",
+    len(rr_tac_pre)
+)
+print(
+    "Intervalos RR válidos:",
+    np.sum(validos_pre)
+)
+print(
+    "Intervalos RR descartados por saturación:",
+    np.sum(~validos_pre)
+)
+
+if np.any(validos_pre):
+    rr_pre_validos = rr_tac_pre[validos_pre]
+    print(f"RR medio: {np.mean(rr_pre_validos):.3f} s")
+    print(f"RR mínimo: {np.min(rr_pre_validos):.3f} s")
+    print(f"RR máximo: {np.max(rr_pre_validos):.3f} s")
+
+print("\n==============================")
+print("TACOGRAMA POST-ACTIVIDAD")
+print("==============================")
+print(
+    "Cantidad total de intervalos RR:",
+    len(rr_tac_post)
+)
+print(
+    "Intervalos RR válidos:",
+    np.sum(validos_post)
+)
+print(
+    "Intervalos RR descartados por saturación:",
+    np.sum(~validos_post)
+)
+
+if np.any(validos_post):
+    rr_post_validos = rr_tac_post[validos_post]
+    print(f"RR medio: {np.mean(rr_post_validos):.3f} s")
+    print(f"RR mínimo: {np.min(rr_post_validos):.3f} s")
+    print(f"RR máximo: {np.max(rr_post_validos):.3f} s")
+
+
+# ============================================================
+# FUNCIÓN PARA GRAFICAR TACOGRAMA
+# ============================================================
+
+def graficar_tacograma(
+    tiempo_rr,
+    rr,
+    validos,
+    titulo,
+    nombre_archivo
+):
+
+    if len(rr) == 0:
+        print(
+            f"No hay suficientes picos R para generar "
+            f"{nombre_archivo}"
+        )
+        return
+
+    plt.figure(figsize=(12, 4.5))
+
+    # Para evitar unir con una línea dos puntos separados por un
+    # intervalo inválido, se construye una copia con NaN.
+    rr_grafico = rr.astype(float).copy()
+    rr_grafico[~validos] = np.nan
+
+    plt.plot(
+        tiempo_rr,
+        rr_grafico * 1000,
+        marker="o",
+        markersize=4,
+        linewidth=1,
+        label="Intervalos RR válidos"
+    )
+
+    if np.any(~validos):
+        plt.scatter(
+            tiempo_rr[~validos],
+            rr[~validos] * 1000,
+            marker="x",
+            s=50,
+            label="Intervalos afectados por saturación"
+        )
+
+    plt.xlabel("Tiempo [s]")
+    plt.ylabel("Intervalo RR [ms]")
+    plt.title(titulo)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    guardar_imagen(nombre_archivo)
+    plt.show()
+    plt.close()
+
+
+graficar_tacograma(
+    tiempo_rr_pre,
+    rr_tac_pre,
+    validos_pre,
+    "Tacograma - ECG en reposo",
+    "Tacograma_Pre.png"
+)
+
+graficar_tacograma(
+    tiempo_rr_post,
+    rr_tac_post,
+    validos_post,
+    "Tacograma - ECG post actividad física",
+    "Tacograma_Post.png"
+)
+
+
+# ============================================================
+# GUARDADO DE LOS TACOGRAMAS EN CSV
+# ============================================================
+
+tacograma_pre = pd.DataFrame(
+    {
+        "Tiempo_s": tiempo_rr_pre,
+        "RR_s": rr_tac_pre,
+        "RR_ms": rr_tac_pre * 1000,
+        "Valido": validos_pre.astype(int)
+    }
+)
+
+tacograma_post = pd.DataFrame(
+    {
+        "Tiempo_s": tiempo_rr_post,
+        "RR_s": rr_tac_post,
+        "RR_ms": rr_tac_post * 1000,
+        "Valido": validos_post.astype(int)
+    }
+)
+
+tacograma_pre.to_csv(
+    "tacograma_pre.csv",
+    index=False
+)
+
+tacograma_post.to_csv(
+    "tacograma_post.csv",
+    index=False
+)
+
+
+# ============================================================
+# GUARDADO Y VERIFICACIÓN FINAL DE TODAS LAS IMÁGENES
+# ============================================================
+# Cada función de graficado guarda la figura en el momento en
+# que se genera. Esta sección final verifica que todas las
+# imágenes correspondientes a Pan-Tompkins y al tacograma hayan
+# quedado efectivamente dentro de la carpeta Imagenes del repo.
+
+IMAGENES_ANALISIS = [
+    "PanTompkins_Etapas_Pre.png",
+    "PanTompkins_Etapas_Post.png",
+    "PanTompkins_Pre.png",
+    "PanTompkins_Post.png",
+    "FC_Pre.png",
+    "FC_Post.png",
+    "Tacograma_Pre.png",
+    "Tacograma_Post.png"
+]
+
+print("\n========================================")
+print("IMÁGENES GENERADAS")
+print("========================================")
+
+for nombre_imagen in IMAGENES_ANALISIS:
+
+    ruta = CARPETA_IMAGENES / nombre_imagen
+
+    if ruta.exists():
+        print(f"OK: {ruta}")
+    else:
+        print(f"FALTA: {ruta}")
+
+print("\nArchivos CSV generados:")
+print("tacograma_pre.csv")
+print("tacograma_post.csv")
+
+# ============================================================
+# INCISO 7 - PERIODOGRAMA DE LOMB
+# ============================================================
+#
+# El periodograma de Lomb permite estimar el contenido
+# frecuencial de una señal muestreada de manera no uniforme.
+#
+# En este caso la señal analizada está formada por los
+# intervalos RR del tacograma. Como los picos R no ocurren
+# exactamente en instantes equiespaciados, los RR tampoco
+# constituyen una señal uniformemente muestreada.
+#
+# Por este motivo no es necesario interpolar previamente
+# el tacograma para aplicar Lomb.
+# ============================================================
+
+
+# ============================================================
+# CONFIGURACIÓN
+# ============================================================
+
+# Frecuencia máxima analizada.
+#
+# Para variabilidad de frecuencia cardíaca resulta suficiente
+# estudiar hasta aproximadamente 0.5 Hz.
+
+F_MAX_LOMB = 0.50
+
+# Cantidad de frecuencias utilizadas para evaluar
+# el periodograma.
+
+N_FRECUENCIAS_LOMB = 5000
+
+
+# ============================================================
+# BANDAS DE FRECUENCIA DE INTERÉS
+# ============================================================
+#
+# Se incluyen principalmente para facilitar posteriormente
+# la comparación entre reposo y post-actividad.
+#
+# LF: 0.04 - 0.15 Hz
+# HF: 0.15 - 0.40 Hz
+#
+# No se utiliza la banda VLF para realizar una interpretación
+# cuantitativa debido a la corta duración del registro en reposo.
+# ============================================================
+
+LF_MIN = 0.04
+LF_MAX = 0.15
+
+HF_MIN = 0.15
+HF_MAX = 0.40
+
+
+# ============================================================
+# PREPARAR DATOS PARA LOMB
+# ============================================================
+
+def preparar_tacograma_lomb(
+    tiempo_rr,
+    rr,
+    validos
+):
+    """
+    Selecciona únicamente los intervalos RR válidos.
+
+    También elimina posibles NaN o infinitos.
+
+    Finalmente desplaza el vector temporal para que comience
+    en cero.
+    """
+
+    tiempo_rr = np.asarray(
+        tiempo_rr,
+        dtype=float
+    )
+
+    rr = np.asarray(
+        rr,
+        dtype=float
+    )
+
+    validos = np.asarray(
+        validos,
+        dtype=bool
+    )
+
+
+    # --------------------------------------------------------
+    # MÁSCARA DE DATOS VÁLIDOS
+    # --------------------------------------------------------
+
+    mascara = (
+        validos
+        &
+        np.isfinite(tiempo_rr)
+        &
+        np.isfinite(rr)
+    )
+
+
+    tiempo = tiempo_rr[
+        mascara
+    ]
+
+    rr_validos = rr[
+        mascara
+    ]
+
+
+    if len(rr_validos) < 3:
+
+        raise ValueError(
+            "No hay suficientes intervalos RR válidos "
+            "para calcular el periodograma de Lomb."
+        )
+
+
+    # --------------------------------------------------------
+    # HACER QUE EL TIEMPO COMIENCE EN CERO
+    # --------------------------------------------------------
+
+    tiempo = (
+        tiempo
+        -
+        tiempo[0]
+    )
+
+
+    return (
+        tiempo,
+        rr_validos
+    )
+
+
+# ============================================================
+# PREPARAR TACOGRAMAS PRE Y POST
+# ============================================================
+
+tiempo_lomb_pre, rr_lomb_pre = preparar_tacograma_lomb(
+    tiempo_rr_pre,
+    rr_tac_pre,
+    validos_pre
+)
+
+
+tiempo_lomb_post, rr_lomb_post = preparar_tacograma_lomb(
+    tiempo_rr_post,
+    rr_tac_post,
+    validos_post
+)
+
+
+# ============================================================
+# FRECUENCIA MÍNIMA DEL ANÁLISIS
+# ============================================================
+#
+# La resolución frecuencial depende de la duración del registro.
+#
+# Para poder comparar PRE y POST sobre la misma grilla de
+# frecuencias se toma como referencia el registro de menor
+# duración.
+#
+# Aproximadamente:
+#
+#       f_min ~ 1 / T
+#
+# ============================================================
+
+duracion_lomb_pre = (
+    tiempo_lomb_pre[-1]
+    -
+    tiempo_lomb_pre[0]
+)
+
+
+duracion_lomb_post = (
+    tiempo_lomb_post[-1]
+    -
+    tiempo_lomb_post[0]
+)
+
+
+duracion_minima = min(
+    duracion_lomb_pre,
+    duracion_lomb_post
+)
+
+
+F_MIN_LOMB = (
+    1.0
+    /
+    duracion_minima
+)
+
+
+print("\n========================================")
+print("CONFIGURACIÓN DEL PERIODOGRAMA DE LOMB")
+print("========================================")
+
+print(
+    f"Duración útil PRE: "
+    f"{duracion_lomb_pre:.2f} s"
+)
+
+print(
+    f"Duración útil POST: "
+    f"{duracion_lomb_post:.2f} s"
+)
+
+print(
+    f"Frecuencia mínima analizada: "
+    f"{F_MIN_LOMB:.4f} Hz"
+)
+
+print(
+    f"Frecuencia máxima analizada: "
+    f"{F_MAX_LOMB:.2f} Hz"
+)
+
+
+# ============================================================
+# GRILLA COMÚN DE FRECUENCIAS
+# ============================================================
+
+frecuencias_lomb = np.linspace(
+    F_MIN_LOMB,
+    F_MAX_LOMB,
+    N_FRECUENCIAS_LOMB
+)
+
+
+# scipy.signal.lombscargle utiliza frecuencia angular [rad/s].
+
+omega_lomb = (
+    2
+    *
+    np.pi
+    *
+    frecuencias_lomb
+)
+
+
+# ============================================================
+# FUNCIÓN PARA CALCULAR EL PERIODOGRAMA
+# ============================================================
+
+def calcular_lomb(
+    tiempo,
+    rr,
+    omega
+):
+    """
+    Calcula el periodograma de Lomb de los intervalos RR.
+
+    Antes del cálculo se elimina:
+
+    1) el valor medio;
+    2) una posible tendencia lineal lenta.
+
+    La eliminación de la tendencia resulta especialmente
+    importante en el registro post-actividad, donde existe
+    una recuperación progresiva de la frecuencia cardíaca.
+
+    El periodograma se devuelve normalizado.
+    """
+
+    tiempo = np.asarray(
+        tiempo,
+        dtype=float
+    )
+
+    rr = np.asarray(
+        rr,
+        dtype=float
+    )
+
+
+    # --------------------------------------------------------
+    # ELIMINAR TENDENCIA LINEAL
+    # --------------------------------------------------------
+    #
+    # Se ajusta:
+    #
+    #       RR(t) = a*t + b
+    #
+    # y se resta esa tendencia.
+    #
+    # De esta forma el periodograma representa principalmente
+    # las oscilaciones alrededor de la tendencia general.
+    # --------------------------------------------------------
+
+    coeficientes = np.polyfit(
+        tiempo,
+        rr,
+        1
+    )
+
+    tendencia = np.polyval(
+        coeficientes,
+        tiempo
+    )
+
+    rr_sin_tendencia = (
+        rr
+        -
+        tendencia
+    )
+
+
+    # --------------------------------------------------------
+    # ELIMINAR POSIBLE MEDIA RESIDUAL
+    # --------------------------------------------------------
+
+    rr_sin_tendencia = (
+        rr_sin_tendencia
+        -
+        np.mean(
+            rr_sin_tendencia
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # PERIODOGRAMA DE LOMB
+    # --------------------------------------------------------
+
+    potencia = signal.lombscargle(
+        tiempo,
+        rr_sin_tendencia,
+        omega,
+        precenter=False,
+        normalize=True
+    )
+
+
+    return (
+        potencia,
+        rr_sin_tendencia,
+        tendencia
+    )
+
+
+# ============================================================
+# CALCULAR LOMB PRE
+# ============================================================
+
+(
+    lomb_pre,
+    rr_pre_sin_tendencia,
+    tendencia_pre
+) = calcular_lomb(
+    tiempo_lomb_pre,
+    rr_lomb_pre,
+    omega_lomb
+)
+
+
+# ============================================================
+# CALCULAR LOMB POST
+# ============================================================
+
+(
+    lomb_post,
+    rr_post_sin_tendencia,
+    tendencia_post
+) = calcular_lomb(
+    tiempo_lomb_post,
+    rr_lomb_post,
+    omega_lomb
+)
+
+
+# ============================================================
+# FRECUENCIA DOMINANTE
+# ============================================================
+
+indice_max_pre = np.argmax(
+    lomb_pre
+)
+
+indice_max_post = np.argmax(
+    lomb_post
+)
+
+
+frecuencia_dominante_pre = (
+    frecuencias_lomb[
+        indice_max_pre
+    ]
+)
+
+frecuencia_dominante_post = (
+    frecuencias_lomb[
+        indice_max_post
+    ]
+)
+
+
+potencia_max_pre = (
+    lomb_pre[
+        indice_max_pre
+    ]
+)
+
+potencia_max_post = (
+    lomb_post[
+        indice_max_post
+    ]
+)
+
+
+# ============================================================
+# PERÍODO ASOCIADO A LA FRECUENCIA DOMINANTE
+# ============================================================
+
+periodo_dominante_pre = (
+    1.0
+    /
+    frecuencia_dominante_pre
+)
+
+periodo_dominante_post = (
+    1.0
+    /
+    frecuencia_dominante_post
+)
+
+
+print("\n========================================")
+print("PERIODOGRAMA DE LOMB - PRE")
+print("========================================")
+
+print(
+    f"Frecuencia dominante: "
+    f"{frecuencia_dominante_pre:.4f} Hz"
+)
+
+print(
+    f"Período correspondiente: "
+    f"{periodo_dominante_pre:.2f} s"
+)
+
+print(
+    f"Potencia normalizada máxima: "
+    f"{potencia_max_pre:.4f}"
+)
+
+
+print("\n========================================")
+print("PERIODOGRAMA DE LOMB - POST")
+print("========================================")
+
+print(
+    f"Frecuencia dominante: "
+    f"{frecuencia_dominante_post:.4f} Hz"
+)
+
+print(
+    f"Período correspondiente: "
+    f"{periodo_dominante_post:.2f} s"
+)
+
+print(
+    f"Potencia normalizada máxima: "
+    f"{potencia_max_post:.4f}"
+)
+
+
+# ============================================================
+# POTENCIA DENTRO DE UNA BANDA
+# ============================================================
+
+def potencia_en_banda(
+    frecuencias,
+    potencia,
+    f_min,
+    f_max
+):
+    """
+    Calcula el área bajo el periodograma dentro de
+    una determinada banda de frecuencias.
+    """
+
+    mascara = (
+        (frecuencias >= f_min)
+        &
+        (frecuencias < f_max)
+    )
+
+
+    if np.sum(
+        mascara
+    ) < 2:
+
+        return np.nan
+
+
+    return np.trapezoid(
+        potencia[
+            mascara
+        ],
+        frecuencias[
+            mascara
+        ]
+    )
+
+
+# ============================================================
+# POTENCIA LF
+# ============================================================
+
+lf_pre = potencia_en_banda(
+    frecuencias_lomb,
+    lomb_pre,
+    LF_MIN,
+    LF_MAX
+)
+
+
+lf_post = potencia_en_banda(
+    frecuencias_lomb,
+    lomb_post,
+    LF_MIN,
+    LF_MAX
+)
+
+
+# ============================================================
+# POTENCIA HF
+# ============================================================
+
+hf_pre = potencia_en_banda(
+    frecuencias_lomb,
+    lomb_pre,
+    HF_MIN,
+    HF_MAX
+)
+
+
+hf_post = potencia_en_banda(
+    frecuencias_lomb,
+    lomb_post,
+    HF_MIN,
+    HF_MAX
+)
+
+
+# ============================================================
+# RELACIÓN LF/HF
+# ============================================================
+
+if hf_pre > 0:
+
+    relacion_lf_hf_pre = (
+        lf_pre
+        /
+        hf_pre
+    )
+
+else:
+
+    relacion_lf_hf_pre = np.nan
+
+
+if hf_post > 0:
+
+    relacion_lf_hf_post = (
+        lf_post
+        /
+        hf_post
+    )
+
+else:
+
+    relacion_lf_hf_post = np.nan
+
+
+print("\n========================================")
+print("DISTRIBUCIÓN ESPECTRAL")
+print("========================================")
+
+print("\nPRE")
+
+print(
+    f"Potencia LF: "
+    f"{lf_pre:.6f}"
+)
+
+print(
+    f"Potencia HF: "
+    f"{hf_pre:.6f}"
+)
+
+print(
+    f"LF/HF: "
+    f"{relacion_lf_hf_pre:.4f}"
+)
+
+
+print("\nPOST")
+
+print(
+    f"Potencia LF: "
+    f"{lf_post:.6f}"
+)
+
+print(
+    f"Potencia HF: "
+    f"{hf_post:.6f}"
+)
+
+print(
+    f"LF/HF: "
+    f"{relacion_lf_hf_post:.4f}"
+)
+
+
+# ============================================================
+# FUNCIÓN PARA GRAFICAR PERIODOGRAMA DE LOMB
+# ============================================================
+
+def graficar_lomb(
+    frecuencias,
+    potencia,
+    titulo,
+    nombre_archivo,
+    frecuencia_dominante=None
+):
+
+    plt.figure(
+        figsize=(12, 5)
+    )
+
+
+    plt.plot(
+        frecuencias,
+        potencia,
+        linewidth=1.2,
+        label="Periodograma de Lomb"
+    )
+
+
+    # --------------------------------------------------------
+    # LÍMITES LF / HF
+    # --------------------------------------------------------
+
+    plt.axvline(
+        LF_MIN,
+        linestyle="--",
+        linewidth=0.8,
+        label="0.04 Hz"
+    )
+
+    plt.axvline(
+        LF_MAX,
+        linestyle="--",
+        linewidth=0.8,
+        label="0.15 Hz"
+    )
+
+    plt.axvline(
+        HF_MAX,
+        linestyle="--",
+        linewidth=0.8,
+        label="0.40 Hz"
+    )
+
+
+    # --------------------------------------------------------
+    # FRECUENCIA DOMINANTE
+    # --------------------------------------------------------
+
+    if frecuencia_dominante is not None:
+
+        plt.axvline(
+            frecuencia_dominante,
+            linestyle=":",
+            linewidth=1.2,
+            label=(
+                f"Frecuencia dominante = "
+                f"{frecuencia_dominante:.3f} Hz"
+            )
+        )
+
+
+    plt.xlabel(
+        "Frecuencia [Hz]"
+    )
+
+    plt.ylabel(
+        "Potencia normalizada"
+    )
+
+    plt.title(
+        titulo
+    )
+
+    plt.xlim(
+        F_MIN_LOMB,
+        F_MAX_LOMB
+    )
+
+    plt.grid(
+        True,
+        alpha=0.3
+    )
+
+    plt.legend()
+
+
+    guardar_imagen(
+        nombre_archivo
+    )
+
+
+    plt.show()
+
+    plt.close()
+
+
+# ============================================================
+# PERIODOGRAMA PRE
+# ============================================================
+
+graficar_lomb(
+    frecuencias_lomb,
+    lomb_pre,
+    "Periodograma de Lomb - ECG en reposo",
+    "Lomb_Pre.png",
+    frecuencia_dominante_pre
+)
+
+
+# ============================================================
+# PERIODOGRAMA POST
+# ============================================================
+
+graficar_lomb(
+    frecuencias_lomb,
+    lomb_post,
+    "Periodograma de Lomb - ECG post actividad física",
+    "Lomb_Post.png",
+    frecuencia_dominante_post
+)
+
+
+# ============================================================
+# COMPARACIÓN PRE VS POST
+# ============================================================
+
+plt.figure(
+    figsize=(12, 5)
+)
+
+
+plt.plot(
+    frecuencias_lomb,
+    lomb_pre,
+    linewidth=1.2,
+    label="Reposo"
+)
+
+
+plt.plot(
+    frecuencias_lomb,
+    lomb_post,
+    linewidth=1.2,
+    label="Post actividad física"
+)
+
+
+# Límites de las bandas
+
+plt.axvline(
+    LF_MIN,
+    linestyle="--",
+    linewidth=0.8
+)
+
+plt.axvline(
+    LF_MAX,
+    linestyle="--",
+    linewidth=0.8
+)
+
+plt.axvline(
+    HF_MAX,
+    linestyle="--",
+    linewidth=0.8
+)
+
+
+plt.xlabel(
+    "Frecuencia [Hz]"
+)
+
+plt.ylabel(
+    "Potencia normalizada"
+)
+
+plt.title(
+    "Comparación de los periodogramas de Lomb"
+)
+
+plt.xlim(
+    F_MIN_LOMB,
+    F_MAX_LOMB
+)
+
+plt.grid(
+    True,
+    alpha=0.3
+)
+
+plt.legend()
+
+
+guardar_imagen(
+    "Lomb_Comparacion.png"
+)
+
+
+plt.show()
+
+plt.close()
+
+
+# ============================================================
+# GUARDAR RESULTADOS EN CSV
+# ============================================================
+
+datos_lomb = pd.DataFrame(
+    {
+        "Frecuencia_Hz":
+        frecuencias_lomb,
+
+        "Lomb_Pre":
+        lomb_pre,
+
+        "Lomb_Post":
+        lomb_post
+    }
+)
+
+
+datos_lomb.to_csv(
+    "periodograma_lomb.csv",
+    index=False
+)
+
+
+# ============================================================
+# RESUMEN NUMÉRICO
+# ============================================================
+
+resumen_lomb = pd.DataFrame(
+    {
+        "Estado": [
+            "Reposo",
+            "Post actividad"
+        ],
+
+        "Frecuencia_dominante_Hz": [
+            frecuencia_dominante_pre,
+            frecuencia_dominante_post
+        ],
+
+        "Periodo_dominante_s": [
+            periodo_dominante_pre,
+            periodo_dominante_post
+        ],
+
+        "Potencia_LF": [
+            lf_pre,
+            lf_post
+        ],
+
+        "Potencia_HF": [
+            hf_pre,
+            hf_post
+        ],
+
+        "Relacion_LF_HF": [
+            relacion_lf_hf_pre,
+            relacion_lf_hf_post
+        ]
+    }
+)
+
+
+resumen_lomb.to_csv(
+    "resumen_lomb.csv",
+    index=False
+)
+
+
+# ============================================================
+# VERIFICACIÓN DE IMÁGENES DEL INCISO 7
+# ============================================================
+
+IMAGENES_LOMB = [
+
+    "Lomb_Pre.png",
+
+    "Lomb_Post.png",
+
+    "Lomb_Comparacion.png"
+]
+
+
+print("\n========================================")
+print("IMÁGENES DEL INCISO 7")
+print("========================================")
+
+
+for nombre_imagen in IMAGENES_LOMB:
+
+    ruta = (
+        CARPETA_IMAGENES
+        /
+        nombre_imagen
+    )
+
+    if ruta.exists():
+
+        print(
+            f"OK: {ruta}"
+        )
+
+    else:
+
+        print(
+            f"FALTA: {ruta}"
+        )
+
+
+print("\nArchivos generados:")
+
+print(
+    "periodograma_lomb.csv"
+)
+
+print(
+    "resumen_lomb.csv"
 )
